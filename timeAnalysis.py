@@ -1,133 +1,156 @@
+
 import os
 import time
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
-from typing import List
+import statistics
+from cryptography.hazmat.primitives.ciphers import (
+    Cipher, algorithms, modes
+)
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305, AESCCM
+from cryptography.hazmat.primitives import hashes, hmac
 
-# --- Configuration ---
-# Number of times to run the encryption loop to gather statistics
-NUM_ITERATIONS = 50000
-# Size of the data to encrypt (in bytes). A larger payload helps reveal timing variance.
-DATA_SIZE = 1024 * 64 # 64 KB payload
+# -------------------------------------------------------------
+# Cipher suite mapping (encryption primitives)
+# -------------------------------------------------------------
 
-def setup_primitives():
-    """Generates the keys and data needed for the experiment."""
-    print(f"Setting up experiment with {DATA_SIZE // 1024} KB payload and {NUM_ITERATIONS} iterations...")
+CIPHER_SUITES = {
+    "TLS_AES_128_GCM_SHA256": "aes-128-gcm",
+    "TLS_AES_256_GCM_SHA384": "aes-256-gcm",
+    "TLS_CHACHA20_POLY1305_SHA256": "chacha20-poly1305",
+    "TLS_AES_128_CCM_SHA256": "aes-128-ccm",
+    "TLS_AES_128_CBC_SHA256": "aes-128-cbc",       # MAC-then-encrypt (HMAC-SHA256)
+    "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA": "3des-cbc",  # Legacy triple DES CBC
+}
 
-    # Keys must be 16 bytes (AES-128) or 32 bytes (ChaCha20-256)
-    key_aes = os.urandom(16)
-    key_chacha = os.urandom(32)
+# -------------------------------------------------------------
+# Configuration
+# -------------------------------------------------------------
+MESSAGE_SIZES = [16, 512, 1024, 16384, 65536]  # bytes
+SAMPLES_PER_SIZE = 200
+backend = default_backend()
 
-    # The data (plaintext) to be encrypted
-    plaintext = os.urandom(DATA_SIZE)
-    
-    return key_aes, key_chacha, plaintext
+# -------------------------------------------------------------
+# Helper functions
+# -------------------------------------------------------------
 
-def encrypt_aes_gcm(key: bytes, plaintext: bytes) -> float:
-    """Performs AES-128-GCM encryption and returns the time taken in nanoseconds."""
+def time_encrypt(func, iterations=SAMPLES_PER_SIZE):
+    """Measure average encryption time for callable `func`."""
+    timings = []
+    for _ in range(iterations):
+        start = time.perf_counter_ns()
+        func()
+        end = time.perf_counter_ns()
+        timings.append(end - start)
+    return statistics.mean(timings), statistics.stdev(timings)
+
+
+def run_aes_gcm(key_len, msg):
+    key = os.urandom(key_len // 8)
+    nonce = os.urandom(12)
     aesgcm = AESGCM(key)
-    nonce = os.urandom(12) # Nonce must be unique for every encryption
-    
-    start = time.perf_counter_ns()
-    aesgcm.encrypt(nonce, plaintext, None)
-    end = time.perf_counter_ns()
-    
-    return end - start
+    return lambda: aesgcm.encrypt(nonce, msg, None)
 
-def encrypt_chacha20_poly1305(key: bytes, plaintext: bytes) -> float:
-    """Performs ChaCha20-Poly1305 encryption and returns the time taken in nanoseconds."""
+
+def run_chacha20_poly1305(msg):
+    key = os.urandom(32)
+    nonce = os.urandom(12)
     chacha = ChaCha20Poly1305(key)
-    nonce = os.urandom(12) # Nonce must be unique for every encryption
-    
-    start = time.perf_counter_ns()
-    chacha.encrypt(nonce, plaintext, None)
-    end = time.perf_counter_ns()
-    
-    return end - start
+    return lambda: chacha.encrypt(nonce, msg, None)
 
-def run_timing_experiment(key: bytes, plaintext: bytes, cipher_name: str, encrypt_func) -> List[float]:
-    """Runs the timing loop for a given cipher function."""
-    times = []
-    print(f"\n--- Running experiment for {cipher_name} ({NUM_ITERATIONS} times) ---")
+
+def run_aes_ccm(msg):
+    key = os.urandom(16)
+    nonce = os.urandom(11)
+    aesccm = AESCCM(key)
+    return lambda: aesccm.encrypt(nonce, msg, None)
+
+
+def run_aes_cbc_hmac_sha256(msg):
+    key = os.urandom(16)
+    pad_len = 16 - (len(msg) % 16)
+    padded = msg + bytes([pad_len]) * pad_len
     
-    for i in range(NUM_ITERATIONS):
-        # We only time the encryption, not key/primitive setup (which is done once)
-        # and we use fresh, random nonces for security, but this is timed inside the function.
+    # Compute HMAC-SHA256 then encrypt (MAC-then-encrypt)
+    def do_encrypt():
         try:
-            time_taken = encrypt_func(key, plaintext)
-            times.append(time_taken)
-        except Exception as e:
-            # Catch errors but continue to ensure full data collection
-            print(f"Error at iteration {i}: {e}")
-            
-    return times
+            iv = os.urandom(16)
+            cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
+            encryptor = cipher.encryptor()
 
-def calculate_stats(times: List[float], cipher_name: str):
-    """Calculates and prints the mean, standard deviation, and variance of the timing data."""
-    if not times:
-        print(f"No timing data collected for {cipher_name}.")
-        return
+            h = hmac.HMAC(key, hashes.SHA256())
+            h.update(padded)
+            tag = h.finalize()
 
-    # Convert times from nanoseconds to microseconds (1,000 ns = 1 µs) for easier reading
-    times_us = [t / 1000 for t in times]
-    
-    mean = sum(times_us) / len(times_us)
-    variance = sum((t - mean) ** 2 for t in times_us) / len(times_us)
-    std_dev = variance ** 0.5
-    
-    print("\n" + "="*50)
-    print(f"Results for: {cipher_name}")
-    print(f"Total Samples: {len(times)}")
-    print(f"Mean Encryption Time: {mean:,.3f} µs (microseconds)")
-    print(f"Standard Deviation (σ): {std_dev:,.3f} µs")
-    # The Coefficient of Variation (CV = σ / mean) is a good measure of relative variance
-    print(f"Coefficient of Variation (CV): {std_dev / mean * 100:.3f}%")
-    print("="*50)
-    
-    # Differential Timing Analysis Insight:
-    # A higher Standard Deviation (σ) and Coefficient of Variation (CV) suggest
-    # that the operation time is highly sensitive to external factors (e.g., CPU cache state, 
-    # S-box lookups). This variance is what is exploited in timing attacks.
-    if std_dev / mean * 100 > 1.0:
-        print(f"Observation: The {cipher_name} implementation shows significant timing variance relative to its mean.")
+            # update and finalize
+            encryptor.update(padded + tag)
+            encryptor.finalize()
+        except:
+            # Ignore if cryptography reuses internal context on last run
+            pass
+
+    return do_encrypt
+
+
+def run_3des_cbc(msg):
+    key = os.urandom(24)
+    pad_len = 8 - (len(msg) % 8)
+    padded = msg + bytes([pad_len]) * pad_len
+
+    def do_encrpyt():
+        iv = os.urandom(8)
+        cipher = Cipher(algorithms.TripleDES(key), modes.CBC(iv), backend=backend)
+        encryptor = cipher.encryptor()
+        encryptor.update(padded)
+        encryptor.finalize()
+
+    return do_encrpyt
+
+# -------------------------------------------------------------
+# Benchmark all cipher suites
+# -------------------------------------------------------------
 
 def main():
-    """Main function to run the experiment."""
-    try:
-        key_aes, key_chacha, plaintext = setup_primitives()
-    except Exception as e:
-        print(f"Setup Error: {e}")
-        return
+    output_file = "results.txt"
 
-    # 1. Run AES-GCM experiment
-    aes_times = run_timing_experiment(
-        key_aes, 
-        plaintext, 
-        "AES-128-GCM (Block Cipher)", 
-        encrypt_aes_gcm
-    )
+    with open(output_file, "w", encoding="utf-8") as f:
+        # Write header
+        f.write(f"{'Cipher Suite':45s} {'Size (B)':>10s} {'Mean (µs)':>12s} {'Std (µs)':>10s} {'MB/s':>10s}\n")
+        f.write("-" * 90 + "\n")
 
-    # 2. Run ChaCha20-Poly1305 experiment
-    chacha_times = run_timing_experiment(
-        key_chacha, 
-        plaintext, 
-        "ChaCha20-Poly1305 (Stream Cipher)", 
-        encrypt_chacha20_poly1305
-    )
+        # print(f"{'Cipher Suite':45s} {'Size (B)':>10s} {'Mean (µs)':>12s} {'Std (µs)':>10s} {'MB/s':>10s}")
+        # print("-" * 90)
 
-    # 3. Calculate and display statistics
-    calculate_stats(aes_times, "AES-128-GCM")
-    calculate_stats(chacha_times, "ChaCha20-Poly1305")
+        for suite, impl in CIPHER_SUITES.items():
+            for size in MESSAGE_SIZES:
+                msg = os.urandom(size)
+
+                # Select encryptor function
+                if impl == "aes-128-gcm":
+                    encrypt_fn = run_aes_gcm(128, msg)
+                elif impl == "aes-256-gcm":
+                    encrypt_fn = run_aes_gcm(256, msg)
+                elif impl == "chacha20-poly1305":
+                    encrypt_fn = run_chacha20_poly1305(msg)
+                elif impl == "aes-128-ccm":
+                    encrypt_fn = run_aes_ccm(msg)
+                elif impl == "aes-128-cbc":
+                    encrypt_fn = run_aes_cbc_hmac_sha256(msg)
+                elif impl == "3des-cbc":
+                    encrypt_fn = run_3des_cbc(msg)
+                else:
+                    continue
+
+                mean_ns, std_ns = time_encrypt(encrypt_fn)
+                mean_us = mean_ns / 1000
+                std_us = std_ns / 1000
+                mbps = (size / (mean_ns / 1e9)) / (1024 * 1024)
+
+                # print(f"{suite:45s} {size:10d} {mean_us:12.2f} {std_us:10.2f} {mbps:10.1f}")
+                # Write results to file
+                f.write(f"{suite:45s} {size:10d} {mean_us:12.2f} {std_us:10.2f} {mbps:10.1f}\n")
+            f.write("-" * 90 + "\n")
+        
+    print(f"Results saved to {output_file}")
 
 if __name__ == "__main__":
-    try:
-        # Check for the required dependency
-        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-        main()
-    except ImportError:
-        print("-" * 70)
-        print("ERROR: The 'cryptography' library is required for this script.")
-        print("Please install it using: pip install cryptography")
-        print("-" * 70)
-        
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+    main()
