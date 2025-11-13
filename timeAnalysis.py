@@ -1,6 +1,7 @@
 
 import os
 import time
+import argparse
 import statistics
 from cryptography.hazmat.primitives.ciphers import (
     Cipher, algorithms, modes
@@ -110,7 +111,14 @@ def run_3des_cbc(msg):
 # -------------------------------------------------------------
 
 def main():
-    output_file = "results.txt"
+    parser = argparse.ArgumentParser(description="Encrpytion Timing Benchmark")
+    parser.add_argument(
+        "-o", "--output",
+        default="results.txt",
+        help="Output filename for benchmark results (default: results.txt)"
+    )
+    args = parser.parse_args()
+    output_file = args.output
 
     with open(output_file, "w", encoding="utf-8") as f:
         # Write header
