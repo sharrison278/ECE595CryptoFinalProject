@@ -8,7 +8,7 @@ import subprocess
 TIMING_SCRIPT = "timeAnalysis.py"  
 DATA_ANALYSIS_SCRIPT = "dataAnalysis.py"  
 OUTPUT_DIR = "output"
-NUM_RUNS = 100
+NUM_RUNS = 5
 
 # -------------------------------
 # 1. Clean/create output folder
