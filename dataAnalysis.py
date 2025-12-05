@@ -24,15 +24,19 @@ show_plots = False
 # -----------------------------
 # Read input directory
 # -----------------------------
-if len(sys.argv) < 2:
-    print("Usage: python dataAnalysis.py <results_directory>")
+if len(sys.argv) < 3:
+    print("Usage: python dataAnalysis.py <results_directory> <plots_directory>")
     sys.exit(1)
 
 input_dir = sys.argv[1]
-figure_dir = "plots"
+figure_dir = sys.argv[2]
 
 if not os.path.isdir(input_dir):
     print(f"Error: {input_dir} is not a directory")
+    sys.exit(1)
+
+if not os.path.isdir(figure_dir):
+    print(f"Error: {figure_dir} is not a directory")
     sys.exit(1)
 
 # -----------------------------
