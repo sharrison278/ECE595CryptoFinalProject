@@ -9,7 +9,7 @@ TIMING_SCRIPT = "timeAnalysis.py"
 DATA_ANALYSIS_SCRIPT = "dataAnalysis.py"  
 OUTPUT_DIR = "output"
 PLOTS_DIR = "plots"
-NUM_RUNS = 5
+NUM_RUNS = 100
 
 # -------------------------------
 # Clean/create output folder

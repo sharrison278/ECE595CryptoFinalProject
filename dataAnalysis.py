@@ -21,9 +21,9 @@ single_size_on = False
 violin_on = False
 box_on = False
 k_means_on = False
-dbscan_on = False
+dbscan_on = True
 
-show_plots = True
+show_plots = False
 
 # -----------------------------
 # Read input directory
@@ -318,6 +318,11 @@ if dbscan_on:
 
     # feature_df = df[['Library', 'Size', 'Time_us']].dropna() 
     feature_df = df[df["Size"].isin([1024, 16384, 65536])][['Library', 'Size', 'Time_us']].dropna()
+    sample_size = 5000
+    if len(feature_df) > sample_size:
+        feature_df = feature_df.sample(n=sample_size, random_state=42)
+        print(f"Dataset sampled down to {sample_size} rows for DBScan")
+
     scaler = StandardScaler()
     X_raw = feature_df[['Size', 'Time_us']].values
     X_scaled = scaler.fit_transform(X_raw)

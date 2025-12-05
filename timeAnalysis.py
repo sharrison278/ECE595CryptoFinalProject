@@ -18,7 +18,7 @@ from Crypto.Random import get_random_bytes
 # Configuration
 # -------------------------------------------------------------
 MESSAGE_SIZES = [16, 512, 1024, 16384, 65536]  # in bytes
-SAMPLES_PER_SIZE = 200
+SAMPLES_PER_SIZE = 100
 backend = default_backend()
 
 # -------------------------------------------------------------
