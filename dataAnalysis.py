@@ -215,7 +215,7 @@ with open(stat_file, "w") as f:
     # ANOVA test
     groups = [df[df['Library']==lib]['Time_us'] for lib in df['Library'].unique()]
     F, p = f_oneway(*groups)
-    anova_line = f"ANOVA F-statistic: {F:.2f}, p-value: {p:.4f}"
+    anova_line = f"ANOVA F-statistic: {F:.2f}, p-value: {p:.9f}"
     print(anova_line)
     f.write(anova_line + "\n")
 

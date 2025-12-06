@@ -7,10 +7,11 @@ import statistics
 from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305, AESCCM
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes, hmac
 from Crypto.Cipher import DES, Blowfish, AES, Salsa20
+
+from cryptography.hazmat.primitives.asymmetric import ec
+
 # IDEA and Camellia ?
 from Crypto.Random import get_random_bytes
 
