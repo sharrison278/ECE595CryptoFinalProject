@@ -231,17 +231,17 @@ def run_blowfish(msg):
     padded_msg = msg + b' ' * (8 - len(msg) % 8)
     return lambda: cipher.encrypt(padded_msg)
 
-def run_camellia(msg):
-    key = get_random_bytes(16)  # Camellia: 16, 24, 32 bytes
-    cipher = Camellia.new(key, Camellia.MODE_ECB)
-    padded_msg = msg + b' ' * (16 - len(msg) % 16)
-    return lambda: cipher.encrypt(padded_msg)
+# def run_camellia(msg):
+#     key = get_random_bytes(16)  # Camellia: 16, 24, 32 bytes
+#     cipher = Camellia.new(key, Camellia.MODE_ECB)
+#     padded_msg = msg + b' ' * (16 - len(msg) % 16)
+#     return lambda: cipher.encrypt(padded_msg)
 
-def run_idea(msg):
-    key = get_random_bytes(16)  # IDEA key is 16 bytes
-    cipher = IDEA.new(key, IDEA.MODE_ECB)
-    padded_msg = msg + b' ' * (8 - len(msg) % 8)
-    return lambda: cipher.encrypt(padded_msg)
+# def run_idea(msg):
+#     key = get_random_bytes(16)  # IDEA key is 16 bytes
+#     cipher = IDEA.new(key, IDEA.MODE_ECB)
+#     padded_msg = msg + b' ' * (8 - len(msg) % 8)
+#     return lambda: cipher.encrypt(padded_msg)
 
 def run_serpent(msg):
     key = get_random_bytes(16)  # Serpent supports 16, 24, 32 bytes
