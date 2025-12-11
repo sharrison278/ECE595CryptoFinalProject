@@ -9,6 +9,9 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305, AESCCM
 from cryptography.hazmat.primitives import hashes, hmac
 from Crypto.Cipher import DES, Blowfish, AES, Salsa20
+from mbedtls import cipher as mbed_cipher
+import subprocess
+import tempfile
 
 from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -27,42 +30,46 @@ backend = default_backend()
 # -------------------------------------------------------------
 
 LIBRARIES = {
-    "AES-128-GCM": {
-        "encrypt": lambda msg: run_aes_gcm(128, msg)
-    },
-    "AES-256-GCM": {
-        "encrypt": lambda msg: run_aes_gcm(256, msg)
-    },
-    "ChaCha20-Poly1305": {
-        "encrypt": lambda msg: run_chacha20_poly1305(msg)
-    },
-    "AES-128-CCM": {
-        "encrypt": lambda msg: run_aes_ccm(msg)
-    },
-    "3DES-CBC": {
-        "encrypt": lambda msg: run_3des_cbc(msg)
-    },
-    "DES-ECB": {
-        "encrypt": lambda msg: run_des(msg)
-    },
-    "Blowfish-ECB": {
-        "encrypt": lambda msg: run_blowfish(msg)
-    },
+    "OpenSSL_1_1_1_AES128GCM": {"encrypt":lambda msg: openssl111_aes_gcm_encrypt(msg)},
+    "OpenSSL_3_0_AES128GCM": {"encrypt":lambda msg: openssl30_aes_gcm_encrypt(msg)},
+    "BoringSSL_AES128GCM": {"encrypt":lambda msg: boringssl_aes_gcm_encrypt(msg)},
+    "mbedTLS_AES128GCM": {"encrypt":lambda msg: mbedtls_aes_gcm_encrypt(msg)},
+    # "AES-128-GCM": {
+    #     "encrypt": lambda msg: run_aes_gcm(128, msg)
+    # },
+    # "AES-256-GCM": {
+    #     "encrypt": lambda msg: run_aes_gcm(256, msg)
+    # },
+    # "ChaCha20-Poly1305": {
+    #     "encrypt": lambda msg: run_chacha20_poly1305(msg)
+    # },
+    # "AES-128-CCM": {
+    #     "encrypt": lambda msg: run_aes_ccm(msg)
+    # },
+    # "3DES-CBC": {
+    #     "encrypt": lambda msg: run_3des_cbc(msg)
+    # },
+    # "DES-ECB": {
+    #     "encrypt": lambda msg: run_des(msg)
+    # },
+    # "Blowfish-ECB": {
+    #     "encrypt": lambda msg: run_blowfish(msg)
+    # },
     # "Camellia-ECB": {
     #     "encrypt": lambda msg: run_camellia(msg)
     # },
     # "IDEA-ECB": {
     #     "encrypt": lambda msg: run_idea(msg)
     # },
-    "Serpent-ECB": {
-        "encrypt": lambda msg: run_serpent(msg)
-    },
-    "AES-GCM-SIV": {
-        "encrypt": lambda msg: run_aes_gcm_siv(msg)
-    },
-    "Salsa20": {
-        "encrypt": lambda msg: run_salsa20(msg)
-    }
+    # "Serpent-ECB": {
+    #     "encrypt": lambda msg: run_serpent(msg)
+    # },
+    # "AES-GCM-SIV": {
+    #     "encrypt": lambda msg: run_aes_gcm_siv(msg)
+    # },
+    # "Salsa20": {
+    #     "encrypt": lambda msg: run_salsa20(msg)
+    # }
 }
 
 
@@ -85,6 +92,109 @@ def time_operation(func, iterations=SAMPLES_PER_SIZE, record_avg=False):
         std  = statistics.stdev(timings)
         return mean, std
     
+
+
+# -----------------------------------------
+# OpenSSL 1.1.1 AES-GCM implementation
+# -----------------------------------------
+def openssl111_aes_gcm_encrypt(msg):
+    key = os.urandom(16)
+    iv  = os.urandom(12)
+
+    def encrypt():
+        with tempfile.NamedTemporaryFile(delete=True) as inf, \
+             tempfile.NamedTemporaryFile(delete=True) as outf:
+
+            inf.write(msg)
+            inf.flush()
+
+            subprocess.run(
+                [
+                    "/usr/local/bin/openssl111",   # <-- YOUR OPENSSL 1.1.1 path
+                    "enc", "-aes-128-gcm",
+                    "-K", key.hex(),
+                    "-iv", iv.hex(),
+                    "-in", inf.name,
+                    "-out", outf.name
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True
+            )
+
+    return encrypt
+
+# -----------------------------------------
+# OpenSSL 3.0 AES-GCM
+# -----------------------------------------
+def openssl30_aes_gcm_encrypt(msg):
+    key = os.urandom(16)
+    iv  = os.urandom(12)
+
+    def encrypt():
+        with tempfile.NamedTemporaryFile(delete=True) as inf, \
+             tempfile.NamedTemporaryFile(delete=True) as outf:
+
+            inf.write(msg)
+            inf.flush()
+
+            subprocess.run(
+                [
+                    "/usr/bin/openssl",   # Ubuntu default → OpenSSL 3.x
+                    "enc", "-aes-128-gcm",
+                    "-K", key.hex(),
+                    "-iv", iv.hex(),
+                    "-in", inf.name,
+                    "-out", outf.name
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True
+            )
+
+    return encrypt
+
+# -----------------------------------------
+# BoringSSL AES-GCM
+# -----------------------------------------
+def boringssl_aes_gcm_encrypt(msg):
+    key = os.urandom(16)
+    iv  = os.urandom(12)
+
+    def encrypt():
+        with tempfile.NamedTemporaryFile(delete=True) as inf, \
+             tempfile.NamedTemporaryFile(delete=True) as outf:
+
+            inf.write(msg)
+            inf.flush()
+
+            subprocess.run(
+                [
+                    "/usr/local/bin/bssl",     # <-- BoringSSL “bssl” tool
+                    "enc", "-aes-128-gcm",
+                    "-K", key.hex(),
+                    "-iv", iv.hex(),
+                    "-in", inf.name,
+                    "-out", outf.name
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True
+            )
+
+    return encrypt
+
+def mbedtls_aes_gcm_encrypt(msg):
+    key = os.urandom(16)
+    iv  = os.urandom(12)
+
+    aes = mbed_cipher.AESGCM(key)
+
+    def encrypt():
+        aes.encrypt(iv, msg, None)
+
+    return encrypt
+
 # ------------------------
 # Decryption 
 # ------------------------
