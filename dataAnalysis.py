@@ -27,7 +27,7 @@ box_on = False
 k_means_on = False
 dbscan_on = False
 
-show_plots = True
+show_plots = False
 
 # -----------------------------
 # Read input directory
