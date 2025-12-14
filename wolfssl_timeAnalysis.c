@@ -1,26 +1,50 @@
-#include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/aes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/aes.h>
+#include <time.h>
+
+#define PLAINTEXT_SIZE 65536  // adjust as needed
+#define AES_KEY_SIZE   16     // AES-128
+#define GCM_IV_SIZE    12
+#define GCM_TAG_SIZE   16
 
 int main() {
-    byte key[16], iv[12], plaintext[1024], ciphertext[1024 + 16], tag[16];
-    int ciphertext_len = 0;
-
-    // Random values
-    wc_RNG rng;
-    wc_InitRng(&rng);
-    wc_RNG_GenerateBlock(&rng, key, sizeof(key));
-    wc_RNG_GenerateBlock(&rng, iv, sizeof(iv));
-    wc_RNG_GenerateBlock(&rng, plaintext, sizeof(plaintext));
-
+    byte key[AES_KEY_SIZE];
+    byte iv[GCM_IV_SIZE];
+    byte plaintext[PLAINTEXT_SIZE];
+    byte ciphertext[PLAINTEXT_SIZE];
+    byte tag[GCM_TAG_SIZE];
     Aes aes;
-    wc_AesGcmSetKey(&aes, key, sizeof(key));
 
-    wc_AesGcmEncrypt(&aes, ciphertext, plaintext, sizeof(plaintext),
-                     iv, sizeof(iv), tag, sizeof(tag));
+    // Seed RNG
+    srand((unsigned int)time(NULL));
 
-    printf("%d\n", sizeof(plaintext)); // trivial output
-    wc_FreeRng(&rng);
+    // Random key, IV, and plaintext
+    for (int i = 0; i < AES_KEY_SIZE; i++) key[i] = rand() % 256;
+    for (int i = 0; i < GCM_IV_SIZE; i++) iv[i] = rand() % 256;
+    for (int i = 0; i < PLAINTEXT_SIZE; i++) plaintext[i] = rand() % 256;
+
+    // Initialize AES structure
+    wc_AesInit(&aes, NULL, INVALID_DEVID);
+
+    // Encrypt using AES-GCM
+    int ret = wc_AesGcmEncrypt(&aes,
+                               plaintext, sizeof(plaintext),  // input
+                               ciphertext,                  // output
+                               iv, sizeof(iv),              // IV
+                               tag, sizeof(tag));           // tag
+    if (ret != 0) {
+        fprintf(stderr, "Encryption failed: %d\n", ret);
+        wc_AesFree(&aes);
+        return 1;
+    }
+
+    // Clean up
+    wc_AesFree(&aes);
+
+    // Print ciphertext size as trivial check
+    printf("%lu\n", sizeof(plaintext));
     return 0;
 }
