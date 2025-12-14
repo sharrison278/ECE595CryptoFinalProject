@@ -1,14 +1,24 @@
+#
+# timeAnalysis.py
+# Run encryption operations and time performance
+#
 
 import os
 import time
 import warnings
 import argparse
 import statistics
+import subprocess
+import tempfile
+
 from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305, AESCCM
-from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives.asymmetric import ec
+from Crypto.Random import get_random_bytes
+from Crypto.Cipher import DES, Blowfish, AES, Salsa20
+from mbedtls import cipher as mbed_cipher
 
 # -------------------------------------------------------------
 # Configuration
@@ -22,46 +32,53 @@ backend = default_backend()
 # -------------------------------------------------------------
 
 LIBRARIES = {
-    "AES-128-GCM": {
-        "encrypt": lambda msg: run_aes_gcm(128, msg),
-        "decrypt": lambda msg: run_aes_gcm_dec(128, msg),
-        "mac":     lambda msg: run_aes_gcm(128, msg),   # AEAD: tag is part of encrypt
-        "ecdh":    lambda: run_ecdh(),
+    "OpenSSL_1_1_1_AES128GCM": {
+        "encrypt":lambda msg: openssl111_aes_gcm_encrypt(msg)
     },
-    "AES-256-GCM": {
-        "encrypt": lambda msg: run_aes_gcm(256, msg),
-        "decrypt": lambda msg: run_aes_gcm_dec(256, msg),
-        "mac":     lambda msg: run_aes_gcm(256, msg),
-        "ecdh":    lambda: run_ecdh(),
+    "OpenSSL_3_0_AES128GCM": {
+        "encrypt":lambda msg: openssl30_aes_gcm_encrypt(msg)
     },
-    "ChaCha20-Poly1305": {
-        "encrypt": lambda msg: run_chacha20_poly1305(msg),
-        "decrypt": lambda msg: run_chacha20_poly1305_dec(msg),
-        "mac":     lambda msg: run_chacha20_poly1305(msg),
-        "ecdh":    lambda: run_ecdh(),
+    "BoringSSL_AES128GCM": {
+        "encrypt":lambda msg: boringssl_aes_gcm_encrypt(msg)
     },
-    "AES-128-CCM": {
-        "encrypt": lambda msg: run_aes_ccm(msg),
-        "decrypt": lambda msg: run_aes_ccm_dec(msg),
-        "mac":     lambda msg: run_aes_ccm(msg),
-        "ecdh":    lambda: run_ecdh(),
+    "mbedTLS_AES128GCM": {
+        "encrypt":lambda msg: mbedtls_aes_gcm_encrypt(msg)
     },
-    "AES-128-CBC-HMAC-SHA256": {
-        "encrypt": lambda msg: run_aes_cbc_hmac_sha256(msg),
-        "decrypt": lambda msg: run_aes_cbc_hmac_sha256_dec(msg),
-        "mac":     lambda msg: run_hmac_sha256(msg),      # external MAC
-        "ecdh":    lambda: run_ecdh(),
-    },
-    "3DES-CBC": {
-        "encrypt": lambda msg: run_3des_cbc(msg),
-        "decrypt": lambda msg: run_3des_cbc_dec(msg),
-        "mac":     lambda msg: run_hmac_sha256(msg),
-        "ecdh":    lambda: run_ecdh(),
-    }
+    # "AES-128-GCM": {
+    #     "encrypt": lambda msg: run_aes_gcm(128, msg)
+    # },
+    # "AES-256-GCM": {
+    #     "encrypt": lambda msg: run_aes_gcm(256, msg)
+    # },
+    # "ChaCha20-Poly1305": {
+    #     "encrypt": lambda msg: run_chacha20_poly1305(msg)
+    # },
+    # "AES-128-CCM": {
+    #     "encrypt": lambda msg: run_aes_ccm(msg)
+    # },
+    # "3DES-CBC": {
+    #     "encrypt": lambda msg: run_3des_cbc(msg)
+    # },
+    # "DES-ECB": {
+    #     "encrypt": lambda msg: run_des(msg)
+    # },
+    # "Blowfish-ECB": {
+    #     "encrypt": lambda msg: run_blowfish(msg)
+    # },
+    # "Serpent-ECB": {
+    #     "encrypt": lambda msg: run_serpent(msg)
+    # },
+    # "AES-GCM-SIV": {
+    #     "encrypt": lambda msg: run_aes_gcm_siv(msg)
+    # },
+    # "Salsa20": {
+    #     "encrypt": lambda msg: run_salsa20(msg)
+    # }
 }
 
+
 # -------------------------------------------------------------
-# Helper functions
+# Timing Function
 # -------------------------------------------------------------
 
 def time_operation(func, iterations=SAMPLES_PER_SIZE, record_avg=False):
@@ -79,6 +96,110 @@ def time_operation(func, iterations=SAMPLES_PER_SIZE, record_avg=False):
         std  = statistics.stdev(timings)
         return mean, std
     
+# -----------------------------------------
+# OpenSSL 1.1.1 AES-GCM implementation
+# -----------------------------------------
+def openssl111_aes_gcm_encrypt(msg):
+    key = os.urandom(16)
+    iv  = os.urandom(12)
+
+    def encrypt():
+        with tempfile.NamedTemporaryFile(delete=True) as inf, \
+             tempfile.NamedTemporaryFile(delete=True) as outf:
+
+            inf.write(msg)
+            inf.flush()
+
+            subprocess.run(
+                [
+                    "/usr/local/bin/openssl111",   # <-- YOUR OPENSSL 1.1.1 path
+                    "enc", "-aes-128-gcm",
+                    "-K", key.hex(),
+                    "-iv", iv.hex(),
+                    "-in", inf.name,
+                    "-out", outf.name
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True
+            )
+
+    return encrypt
+
+# -----------------------------------------
+# OpenSSL 3.0 AES-GCM
+# -----------------------------------------
+def openssl30_aes_gcm_encrypt(msg):
+    key = os.urandom(16)
+    iv  = os.urandom(12)
+
+    def encrypt():
+        with tempfile.NamedTemporaryFile(delete=True) as inf, \
+             tempfile.NamedTemporaryFile(delete=True) as outf:
+
+            inf.write(msg)
+            inf.flush()
+
+            subprocess.run(
+                [
+                    "/usr/bin/openssl",   # Ubuntu default → OpenSSL 3.x
+                    "enc", "-aes-128-gcm",
+                    "-K", key.hex(),
+                    "-iv", iv.hex(),
+                    "-in", inf.name,
+                    "-out", outf.name
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True
+            )
+
+    return encrypt
+
+# -----------------------------------------
+# BoringSSL AES-GCM
+# -----------------------------------------
+def boringssl_aes_gcm_encrypt(msg):
+    key = os.urandom(16)
+    iv  = os.urandom(12)
+
+    def encrypt():
+        with tempfile.NamedTemporaryFile(delete=True) as inf, \
+             tempfile.NamedTemporaryFile(delete=True) as outf:
+
+            inf.write(msg)
+            inf.flush()
+
+            subprocess.run(
+                [
+                    "/usr/local/bin/bssl",     # <-- BoringSSL “bssl” tool
+                    "enc", "-aes-128-gcm",
+                    "-K", key.hex(),
+                    "-iv", iv.hex(),
+                    "-in", inf.name,
+                    "-out", outf.name
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True
+            )
+
+    return encrypt
+
+# -----------------------------------------
+# mbedTLS AES128GCM
+# -----------------------------------------
+def mbedtls_aes_gcm_encrypt(msg):
+    key = os.urandom(16)
+    iv  = os.urandom(12)
+
+    aes = mbed_cipher.AESGCM(key)
+
+    def encrypt():
+        aes.encrypt(iv, msg, None)
+
+    return encrypt
+
 # ------------------------
 # Decryption 
 # ------------------------
@@ -170,7 +291,6 @@ def run_ecdh():
     # Generate ephemeral key pairs once
     private_key_a = ec.generate_private_key(ec.SECP256R1())
     private_key_b = ec.generate_private_key(ec.SECP256R1())
-
     public_key_b = private_key_b.public_key()
 
     # Benchmark: compute shared secret
@@ -191,8 +311,40 @@ def run_hmac_sha256(msg):
     return mac_fn
 
 # ------------------------
-# Decryption 
+# Encryption 
 # ------------------------
+
+def run_des(msg):
+    key = get_random_bytes(8)  # DES key is 8 bytes
+    cipher = DES.new(key, DES.MODE_ECB)
+    padded_msg = msg + b' ' * (8 - len(msg) % 8)  # Simple padding
+    return lambda: cipher.encrypt(padded_msg)
+
+def run_blowfish(msg):
+    key = get_random_bytes(16)  # Blowfish supports 4-56 bytes
+    cipher = Blowfish.new(key, Blowfish.MODE_ECB)
+    padded_msg = msg + b' ' * (8 - len(msg) % 8)
+    return lambda: cipher.encrypt(padded_msg)
+
+def run_serpent(msg):
+    key = get_random_bytes(16)  # Serpent supports 16, 24, 32 bytes
+    cipher = AES.new(key, AES.MODE_ECB)  # PyCryptodome doesn’t have Serpent natively
+    # Placeholder: you need a Serpent implementation or library
+    padded_msg = msg + b' ' * (16 - len(msg) % 16)
+    return lambda: cipher.encrypt(padded_msg)
+
+def run_aes_gcm_siv(msg):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # AES-GCM-SIV requires specialized lib
+    key = os.urandom(32)
+    nonce = os.urandom(12)
+    aesgcm = AESGCM(key)  # For actual GCM-SIV, consider pyca/cryptography >= 40
+    return lambda: aesgcm.encrypt(nonce, msg, None)
+
+def run_salsa20(msg):
+    key = get_random_bytes(32)
+    nonce = get_random_bytes(8)
+    cipher = Salsa20.new(key=key, nonce=nonce)
+    return lambda: cipher.encrypt(msg)
 
 def run_aes_gcm(key_len, msg):
     key = os.urandom(key_len // 8)
@@ -253,7 +405,7 @@ def run_3des_cbc(msg):
     return do_encrpyt
 
 # -------------------------------------------------------------
-# Benchmark all cipher suites
+# Run Benchmark
 # -------------------------------------------------------------
 
 def main():
@@ -269,39 +421,21 @@ def main():
     with open(output_file, "w", encoding="utf-8") as f:
 
         # HEADER
-        f.write(f"{'Library':35s} {'Operation':15s} {'Size (B)':>10s} {'Time_ns':>12s}\n")
-        f.write("-" * 80 + "\n")
+        f.write(f"{'Library':35s} {'Size (B)':>10s} {'Time_ns':>12s}\n")
+        f.write("-" * 60 + "\n")
 
         # PER-LIBRARY BENCHMARKS
         for lib_name, ops in LIBRARIES.items():
 
-            # Symmetric operations
-            for size in MESSAGE_SIZES:
+            for size in MESSAGE_SIZES: # [16, 512, 1024, 16384, 65536] in bytes
                 msg = os.urandom(size)
 
-                # ----- Encryption -----
                 encrypt_fn = ops["encrypt"](msg)
                 for t in time_operation(encrypt_fn, record_avg=False):
-                    f.write(f"{lib_name:35s} {'encrypt':15s} {size:10d} {t:12d}\n")
+                    f.write(f"{lib_name:35s} {size:10d} {t:12d}\n")
 
-                # ----- Decryption -----
-                decrypt_fn = ops["decrypt"](msg)
-                for t in time_operation(decrypt_fn, record_avg=False):
-                    f.write(f"{lib_name:35s} {'decrypt':15s} {size:10d} {t:12d}\n")
+            f.write("-" * 60 + "\n")
 
-                # ----- Authentication (MAC or AEAD) -----
-                mac_fn = ops["mac"](msg)
-                for t in time_operation(mac_fn, record_avg=False):
-                    f.write(f"{lib_name:35s} {'mac-auth':15s} {size:10d} {t:12d}\n")
-
-            f.write("-" * 80 + "\n")
- 
-            # ----- ECDH benchmark (size-independent) -----
-            ecdh_fn = ops["ecdh"]()
-            for t in time_operation(ecdh_fn, record_avg=False):
-                f.write(f"{lib_name:35s} {'ecdh':15s} {'-':>10s} {t:12d}\n")
-
-            f.write("-" * 80 + "\n")
 
     print(f"Results saved to {output_file}")
 
