@@ -24,7 +24,7 @@ from mbedtls import cipher as mbed_cipher
 # Configuration
 # -------------------------------------------------------------
 MESSAGE_SIZES = [16, 512, 1024, 16384, 65536]  # in bytes
-SAMPLES_PER_SIZE = 200
+SAMPLES_PER_SIZE = 100
 backend = default_backend()
 
 # -------------------------------------------------------------
@@ -114,8 +114,11 @@ def openssl111_aes_gcm_encrypt(msg):
                 [
                     "/usr/local/bin/openssl111",   # <-- YOUR OPENSSL 1.1.1 path
                     "enc", "-aes-128-gcm",
+                    "-nosalt",
                     "-K", key.hex(),
                     "-iv", iv.hex(),
+                    "-aad", "",
+                    "-tag", tagf.name,
                     "-in", inf.name,
                     "-out", outf.name
                 ],
@@ -144,8 +147,11 @@ def openssl30_aes_gcm_encrypt(msg):
                 [
                     "/usr/bin/openssl",   # Ubuntu default → OpenSSL 3.x
                     "enc", "-aes-128-gcm",
+                    "-nosalt",
                     "-K", key.hex(),
                     "-iv", iv.hex(),
+                    "-aad", "",
+                    "-tag", tagf.name,
                     "-in", inf.name,
                     "-out", outf.name
                 ],
