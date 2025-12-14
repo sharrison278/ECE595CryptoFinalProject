@@ -9,7 +9,7 @@ int main() {
     byte key[16];
     byte iv[12];
     byte plaintext[1024];      // Adjust size as needed
-    byte ciphertext[1024];     // ciphertext same size as plaintext
+    byte ciphertext[1024 + 16];     // ciphertext same size as plaintext
     byte tag[16];
 
     // Random key, IV, and plaintext
@@ -30,11 +30,11 @@ int main() {
     word32 aadLen = 0;
 
     ret = wc_AesGcmEncrypt(&aes,
-                           plaintext, sizeof(plaintext),  // input
+                           plaintext, sizeof(plaintext), // input
                            ciphertext,                   // output
                            iv, sizeof(iv),               // IV
-                           aad, aadLen,                  // AAD (optional)
-                           tag, sizeof(tag));            // authentication tag
+                           aad, aadLen,                  // AAD
+                           tag, sizeof(tag));            // tag
 
     if (ret != 0) {
         fprintf(stderr, "Encryption failed: %d\n", ret);
