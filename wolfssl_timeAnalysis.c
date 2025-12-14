@@ -8,8 +8,8 @@
 int main() {
     byte key[16];
     byte iv[12];
-    byte plaintext[1024];      // Adjust size as needed
-    byte ciphertext[1024 + 16];     // ciphertext same size as plaintext
+    byte plaintext[1024];
+    byte ciphertext[1024 + 16];
     byte tag[16];
 
     // Random key, IV, and plaintext
@@ -19,30 +19,33 @@ int main() {
     for (int i = 0; i < sizeof(plaintext); i++) plaintext[i] = rand() % 256;
 
     Aes aes;
+    wc_AesInit(&aes, NULL, INVALID_DEVID);  // Initialize aes struct
+
     int ret = wc_AesGcmSetKey(&aes, key, sizeof(key));
     if (ret != 0) {
         fprintf(stderr, "Failed to set AES key: %d\n", ret);
+        wc_AesFree(&aes);
         return 1;
     }
 
-    // No additional authenticated data (AAD), length 0
     const byte* aad = NULL;
     word32 aadLen = 0;
 
     ret = wc_AesGcmEncrypt(&aes,
-                           plaintext, sizeof(plaintext), // input
-                           ciphertext,                   // output
-                           iv, sizeof(iv),               // IV
-                           aad, aadLen,                  // AAD
-                           tag, sizeof(tag));            // tag
+                           plaintext, sizeof(plaintext),
+                           ciphertext,
+                           iv, sizeof(iv),
+                           aad, aadLen,
+                           tag, sizeof(tag));
 
     if (ret != 0) {
         fprintf(stderr, "Encryption failed: %d\n", ret);
+        wc_AesFree(&aes);
         return 1;
     }
 
-    // Output length for consistency with other benchmarks
     printf("%lu\n", sizeof(plaintext));
 
+    wc_AesFree(&aes);  // Free resources
     return 0;
 }
