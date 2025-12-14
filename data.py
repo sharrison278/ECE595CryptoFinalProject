@@ -57,12 +57,15 @@ for fname in os.listdir(input_dir):
         line = line.strip()
         if not line or line.startswith('-') or line.startswith('Library'):
             continue
-        parts = line.split(maxsplit=3)
+
+        parts = line.split()
         if len(parts) < 3:
             continue
-        library = parts[0]
-        size = float(parts[1]) if parts[1] != '-' else None
-        time_ns = float(parts[2]) if parts[2] != '-' else None
+
+        # Everything except the last 2 parts is the library name
+        library = " ".join(parts[:-2])
+        size = float(parts[-2]) if parts[-2] != '-' else None
+        time_ns = float(parts[-1]) if parts[-1] != '-' else None
         time_us = time_ns / 1000.0 if time_ns is not None else None
 
         data.append({
@@ -85,10 +88,10 @@ df['Time_us_per_byte'] = df['Time_us'] / df['Size']
 # Detect OpenSSL version from library name
 # -----------------------------
 def extract_openssl_version(lib_name):
-    lib_name = lib_name.lower()
-    if 'openssl111' in lib_name:
+    lib_lower = lib_name.lower()
+    if 'openssl_1_1_1' in lib_lower:
         return 'OpenSSL 1.1.1'
-    elif 'openssl30' in lib_name:
+    elif 'openssl_3_0' in lib_lower:
         return 'OpenSSL 3.0'
     else:
         return 'Other'
