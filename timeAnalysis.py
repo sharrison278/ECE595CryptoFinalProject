@@ -43,9 +43,9 @@ LIBRARIES = {
     # "BoringSSL_AES128GCM": {
     #     "encrypt":lambda msg: boringssl_aes_gcm_encrypt(msg)
     # },
-    "mbedTLS_AES128GCM": {
-        "encrypt":lambda msg: mbedtls_aes_gcm_encrypt(msg)
-    },
+    # "mbedTLS_AES128GCM": {
+    #    "encrypt":lambda msg: mbedtls_aes_gcm_encrypt(msg)
+    # },
     # "AES-128-GCM": {
     #     "encrypt": lambda msg: run_aes_gcm(128, msg)
     # },
