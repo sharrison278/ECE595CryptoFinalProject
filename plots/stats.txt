@@ -1,0 +1,29 @@
+=== Library Statistics ===
+
+Library                 Mean (us)  Median (us)     Variance
+AES-128-GCM                  5.27         2.20        24.66
+AES-256-GCM                  6.18         2.20        40.43
+ChaCha20-Poly1305            9.88         2.60       131.99
+AES-128-CCM                 14.48         3.30       316.16
+3DES-CBC                   498.48        43.40    531489.37
+DES-ECB                    171.68        12.60     64930.92
+Blowfish-ECB               104.12         8.20     23957.90
+Serpent-ECB                  5.56         2.10        32.39
+AES-GCM-SIV                  6.21         2.20        40.74
+Salsa20                     63.90         5.70      8723.59
+
+Correlation between Time_us and Library (encoded 0-9): 0.0269
+
+Mean Time per Library (us):
+3DES-CBC            : 498.48
+AES-128-CCM         : 14.48
+AES-128-GCM         : 5.27
+AES-256-GCM         : 6.18
+AES-GCM-SIV         : 6.21
+Blowfish-ECB        : 104.12
+ChaCha20-Poly1305   : 9.88
+DES-ECB             : 171.68
+Salsa20             : 63.90
+Serpent-ECB         : 5.56
+
+ANOVA F-statistic: 1895.30, p-value: 0.0000
