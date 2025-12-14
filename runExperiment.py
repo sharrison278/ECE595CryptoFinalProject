@@ -1,3 +1,8 @@
+#
+# runExperiment.py
+# Runs timeAnalysis.py then runs dataAnalysis.py on the collected data.
+#
+
 import os
 import shutil
 import subprocess

@@ -1,3 +1,8 @@
+#
+# dataAnalysis.py
+# Runs analysis on collected timing data.
+#
+
 import sys
 import os
 import pandas as pd
@@ -11,7 +16,6 @@ from sklearn.cluster import DBSCAN
 from scipy.spatial import ConvexHull
 import numpy as np
 from scipy.stats import f_oneway
-
 
 # -----------------------------
 # Data Analysis Configuration

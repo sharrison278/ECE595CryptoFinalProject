@@ -1,22 +1,24 @@
+#
+# timeAnalysis.py
+# Run encryption operations and time performance
+#
 
 import os
 import time
 import warnings
 import argparse
 import statistics
+import subprocess
+import tempfile
+
 from cryptography.hazmat.primitives.ciphers import (Cipher, algorithms, modes)
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305, AESCCM
 from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives.asymmetric import ec
+from Crypto.Random import get_random_bytes
 from Crypto.Cipher import DES, Blowfish, AES, Salsa20
 from mbedtls import cipher as mbed_cipher
-import subprocess
-import tempfile
-
-from cryptography.hazmat.primitives.asymmetric import ec
-
-# IDEA and Camellia ?
-from Crypto.Random import get_random_bytes
 
 # -------------------------------------------------------------
 # Configuration
@@ -30,10 +32,18 @@ backend = default_backend()
 # -------------------------------------------------------------
 
 LIBRARIES = {
-    "OpenSSL_1_1_1_AES128GCM": {"encrypt":lambda msg: openssl111_aes_gcm_encrypt(msg)},
-    "OpenSSL_3_0_AES128GCM": {"encrypt":lambda msg: openssl30_aes_gcm_encrypt(msg)},
-    "BoringSSL_AES128GCM": {"encrypt":lambda msg: boringssl_aes_gcm_encrypt(msg)},
-    "mbedTLS_AES128GCM": {"encrypt":lambda msg: mbedtls_aes_gcm_encrypt(msg)},
+    "OpenSSL_1_1_1_AES128GCM": {
+        "encrypt":lambda msg: openssl111_aes_gcm_encrypt(msg)
+    },
+    "OpenSSL_3_0_AES128GCM": {
+        "encrypt":lambda msg: openssl30_aes_gcm_encrypt(msg)
+    },
+    "BoringSSL_AES128GCM": {
+        "encrypt":lambda msg: boringssl_aes_gcm_encrypt(msg)
+    },
+    "mbedTLS_AES128GCM": {
+        "encrypt":lambda msg: mbedtls_aes_gcm_encrypt(msg)
+    },
     # "AES-128-GCM": {
     #     "encrypt": lambda msg: run_aes_gcm(128, msg)
     # },
@@ -55,12 +65,6 @@ LIBRARIES = {
     # "Blowfish-ECB": {
     #     "encrypt": lambda msg: run_blowfish(msg)
     # },
-    # "Camellia-ECB": {
-    #     "encrypt": lambda msg: run_camellia(msg)
-    # },
-    # "IDEA-ECB": {
-    #     "encrypt": lambda msg: run_idea(msg)
-    # },
     # "Serpent-ECB": {
     #     "encrypt": lambda msg: run_serpent(msg)
     # },
@@ -74,7 +78,7 @@ LIBRARIES = {
 
 
 # -------------------------------------------------------------
-# Helper functions
+# Timing Function
 # -------------------------------------------------------------
 
 def time_operation(func, iterations=SAMPLES_PER_SIZE, record_avg=False):
@@ -92,8 +96,6 @@ def time_operation(func, iterations=SAMPLES_PER_SIZE, record_avg=False):
         std  = statistics.stdev(timings)
         return mean, std
     
-
-
 # -----------------------------------------
 # OpenSSL 1.1.1 AES-GCM implementation
 # -----------------------------------------
@@ -184,6 +186,9 @@ def boringssl_aes_gcm_encrypt(msg):
 
     return encrypt
 
+# -----------------------------------------
+# mbedTLS AES128GCM
+# -----------------------------------------
 def mbedtls_aes_gcm_encrypt(msg):
     key = os.urandom(16)
     iv  = os.urandom(12)
@@ -286,7 +291,6 @@ def run_ecdh():
     # Generate ephemeral key pairs once
     private_key_a = ec.generate_private_key(ec.SECP256R1())
     private_key_b = ec.generate_private_key(ec.SECP256R1())
-
     public_key_b = private_key_b.public_key()
 
     # Benchmark: compute shared secret
@@ -307,27 +311,8 @@ def run_hmac_sha256(msg):
     return mac_fn
 
 # ------------------------
-# encryption 
+# Encryption 
 # ------------------------
-
-# def run_rsa(msg):
-#     # Generate RSA key pair
-#     private_key = rsa.generate_private_key(
-#         public_exponent=65537,
-#         key_size=2048,
-#     )
-#     public_key = private_key.public_key()
-#     # Function to encrypt the message
-#     def encrypt():
-#         return public_key.encrypt(
-#             msg,
-#             padding.OAEP(
-#                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
-#                 algorithm=hashes.SHA256(),
-#                 label=None)
-#         )
-
-#     return encrypt
 
 def run_des(msg):
     key = get_random_bytes(8)  # DES key is 8 bytes
@@ -340,18 +325,6 @@ def run_blowfish(msg):
     cipher = Blowfish.new(key, Blowfish.MODE_ECB)
     padded_msg = msg + b' ' * (8 - len(msg) % 8)
     return lambda: cipher.encrypt(padded_msg)
-
-# def run_camellia(msg):
-#     key = get_random_bytes(16)  # Camellia: 16, 24, 32 bytes
-#     cipher = Camellia.new(key, Camellia.MODE_ECB)
-#     padded_msg = msg + b' ' * (16 - len(msg) % 16)
-#     return lambda: cipher.encrypt(padded_msg)
-
-# def run_idea(msg):
-#     key = get_random_bytes(16)  # IDEA key is 16 bytes
-#     cipher = IDEA.new(key, IDEA.MODE_ECB)
-#     padded_msg = msg + b' ' * (8 - len(msg) % 8)
-#     return lambda: cipher.encrypt(padded_msg)
 
 def run_serpent(msg):
     key = get_random_bytes(16)  # Serpent supports 16, 24, 32 bytes
@@ -432,7 +405,7 @@ def run_3des_cbc(msg):
     return do_encrpyt
 
 # -------------------------------------------------------------
-# Benchmark all cipher suites
+# Run Benchmark
 # -------------------------------------------------------------
 
 def main():
@@ -454,7 +427,7 @@ def main():
         # PER-LIBRARY BENCHMARKS
         for lib_name, ops in LIBRARIES.items():
 
-            for size in MESSAGE_SIZES: # [16, 512, 1024, 16384, 65536]  # in bytes
+            for size in MESSAGE_SIZES: # [16, 512, 1024, 16384, 65536] in bytes
                 msg = os.urandom(size)
 
                 encrypt_fn = ops["encrypt"](msg)
