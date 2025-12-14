@@ -35,10 +35,10 @@ backend = default_backend()
 
 LIBRARIES = {
     "OpenSSL_1_1_1_AES128GCM": {
-        "encrypt":lambda msg: openssl111_aes_gcm_encrypt(msg)
+        "encrypt":lambda msg: run_openssl_bin("./aes_gcm_111")
     },
     "OpenSSL_3_0_AES128GCM": {
-        "encrypt":lambda msg: openssl30_aes_gcm_encrypt(msg)
+        "encrypt":lambda msg: run_openssl_bin("./aes_gcm_30")
     },
     # "BoringSSL_AES128GCM": {
     #     "encrypt":lambda msg: boringssl_aes_gcm_encrypt(msg)
@@ -99,6 +99,12 @@ def warmup(func, rounds=WARMUP_ROUNDS):
 # -----------------------------------------
 # OpenSSL 1.1.1 AES-GCM implementation
 # -----------------------------------------
+
+def run_openssl_bin(path):
+    def encrypt():
+        subprocess.run([path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    return encrypt
+
 def openssl111_aes_gcm_encrypt(msg):
     key = os.urandom(16)
     iv  = os.urandom(12)
