@@ -40,8 +40,14 @@ LIBRARIES = {
     "OpenSSL_3_0_AES128GCM": {
         "encrypt":lambda msg: run_openssl_bin("./aes_gcm_30")
     },
-    # "BoringSSL_AES128GCM": {
-    #     "encrypt":lambda msg: boringssl_aes_gcm_encrypt(msg)
+    "BoringSSL_AES128GCM": {
+        "encrypt":lambda msg: run_openssl_bin("./aes_gcm_boringssl")
+    },
+    "LibreSSL_AES128GCM": {
+        "encrypt":lambda msg: run_openssl_bin("./aes_gcm_libressl")
+    },
+    # "WolfSSL_AES128GCM": {
+    #     "encrypt":lambda msg: run_openssl_bin("./aes_gcm_wolfssl")
     # },
     # "mbedTLS_AES128GCM": {
     #    "encrypt":lambda msg: mbedtls_aes_gcm_encrypt(msg)

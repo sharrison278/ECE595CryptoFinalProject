@@ -97,6 +97,8 @@ def extract_openssl_version(lib_name):
         return 'BoringSSL'
     elif 'libressl_aes128gcm' in lib_lower:
         return 'LibreSSL'
+    elif 'wolfssl_aes128gcm' in lib_lower:
+        return 'WolfSSL'
     else:
         return 'Other'
 

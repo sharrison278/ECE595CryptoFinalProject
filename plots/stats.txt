@@ -1,29 +1,14 @@
 === Library Statistics ===
 
-Library                 Mean (us)  Median (us)     Variance
-AES-128-GCM                  4.28         0.85       182.49
-AES-256-GCM                  5.11         0.92       142.23
-ChaCha20-Poly1305            9.49         1.29      3235.53
-AES-128-CCM                 13.93         1.70      1274.17
-3DES-CBC                   568.33        43.01    770191.00
-DES-ECB                    170.57        11.80     72050.19
-Blowfish-ECB                88.66         6.78     29351.78
-Serpent-ECB                  6.06         2.00      1083.08
-AES-GCM-SIV                  5.96         0.91     37985.53
-Salsa20                     56.63         4.92      9453.68
+Library                  Mean(us)   Median(us)     Variance
+OpenSSL_1_1_1_AES128GCM        52.58        41.55      1365.79
+OpenSSL_3_0_AES128GCM        63.76        60.26       391.80
+BoringSSL_AES128GCM         55.09        53.56       113.24
+LibreSSL_AES128GCM          36.69        35.80        39.92
 
-Correlation between Time_us and Library (encoded 0-9): 0.0144
-
-Mean Time per Library (us):
-3DES-CBC            : 568.33
-AES-128-CCM         : 13.93
-AES-128-GCM         : 4.28
-AES-256-GCM         : 5.11
-AES-GCM-SIV         : 5.96
-Blowfish-ECB        : 88.66
-ChaCha20-Poly1305   : 9.49
-DES-ECB             : 170.57
-Salsa20             : 56.63
-Serpent-ECB         : 6.06
-
-ANOVA F-statistic: 16652.35, p-value: 0.0000
+=== OpenSSL Version Statistics ===
+OpenSSL 1.1.1   Mean:      52.58, Median:      41.55, Var:    1365.79
+OpenSSL 3.0     Mean:      63.76, Median:      60.26, Var:     391.80
+BoringSSL       Mean:      55.09, Median:      53.56, Var:     113.24
+LibreSSL        Mean:      36.69, Median:      35.80, Var:      39.92
+Mann-Whitney U test OpenSSL 1.1.1 vs 3.0: U=1260320.5, p=0.000000
