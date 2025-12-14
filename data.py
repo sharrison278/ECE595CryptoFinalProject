@@ -93,6 +93,10 @@ def extract_openssl_version(lib_name):
         return 'OpenSSL 1.1.1'
     elif 'openssl_3_0' in lib_lower:
         return 'OpenSSL 3.0'
+    elif 'boringssl_aes128gcm' in lib_lower:
+        return 'BoringSSL'
+    elif 'libressl_aes128gcm' in lib_lower:
+        return 'LibreSSL'
     else:
         return 'Other'
 
