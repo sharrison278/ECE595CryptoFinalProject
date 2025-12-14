@@ -24,7 +24,9 @@ from mbedtls import cipher as mbed_cipher
 # Configuration
 # -------------------------------------------------------------
 MESSAGE_SIZES = [16, 512, 1024, 16384, 65536]  # in bytes
-SAMPLES_PER_SIZE = 100
+SAMPLES_PER_SIZE = 1000 if max(MESSAGE_SIZES) <= 1024 else 500
+BATCH_SIZE = 100  # number of encryptions per timed call
+WARMUP_ROUNDS = 20
 backend = default_backend()
 
 # -------------------------------------------------------------
@@ -38,9 +40,9 @@ LIBRARIES = {
     "OpenSSL_3_0_AES128GCM": {
         "encrypt":lambda msg: openssl30_aes_gcm_encrypt(msg)
     },
-    "BoringSSL_AES128GCM": {
-        "encrypt":lambda msg: boringssl_aes_gcm_encrypt(msg)
-    },
+    # "BoringSSL_AES128GCM": {
+    #     "encrypt":lambda msg: boringssl_aes_gcm_encrypt(msg)
+    # },
     "mbedTLS_AES128GCM": {
         "encrypt":lambda msg: mbedtls_aes_gcm_encrypt(msg)
     },
@@ -81,21 +83,19 @@ LIBRARIES = {
 # Timing Function
 # -------------------------------------------------------------
 
-def time_operation(func, iterations=SAMPLES_PER_SIZE, record_avg=False):
+def time_operation(func, iterations=SAMPLES_PER_SIZE):
     timings = []
     for _ in range(iterations):
         start = time.perf_counter_ns()
         func()
         end = time.perf_counter_ns()
         timings.append(end - start)
-
-    if not record_avg:
-        return timings
-    else:
-        mean = statistics.mean(timings)
-        std  = statistics.stdev(timings)
-        return mean, std
+    return timings
     
+def warmup(func, rounds=WARMUP_ROUNDS):
+    for _ in range(rounds):
+        func()
+
 # -----------------------------------------
 # OpenSSL 1.1.1 AES-GCM implementation
 # -----------------------------------------
@@ -104,28 +104,29 @@ def openssl111_aes_gcm_encrypt(msg):
     iv  = os.urandom(12)
 
     def encrypt():
-        with tempfile.NamedTemporaryFile(delete=True) as inf, \
-             tempfile.NamedTemporaryFile(delete=True) as outf:
+        with tempfile.NamedTemporaryFile() as inf, \
+             tempfile.NamedTemporaryFile() as outf, \
+             tempfile.NamedTemporaryFile() as tagf:
 
             inf.write(msg)
             inf.flush()
 
-            subprocess.run(
-                [
-                    "/usr/local/bin/openssl111",   # <-- YOUR OPENSSL 1.1.1 path
-                    "enc", "-aes-128-gcm",
-                    "-nosalt",
-                    "-K", key.hex(),
-                    "-iv", iv.hex(),
-                    "-aad", "",
-                    "-tag", tagf.name,
-                    "-in", inf.name,
-                    "-out", outf.name
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=True
-            )
+            for _ in range(BATCH_SIZE):
+                subprocess.run(
+                    [
+                        "/usr/local/bin/openssl111",
+                        "enc", "-aes-128-gcm",
+                        "-nosalt",
+                        "-K", key.hex(),
+                        "-iv", iv.hex(),
+                        "-aad", "",
+                        "-tag", tagf.name,
+                        "-in", inf.name,
+                        "-out", outf.name
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=True)
 
     return encrypt
 
@@ -137,28 +138,29 @@ def openssl30_aes_gcm_encrypt(msg):
     iv  = os.urandom(12)
 
     def encrypt():
-        with tempfile.NamedTemporaryFile(delete=True) as inf, \
-             tempfile.NamedTemporaryFile(delete=True) as outf:
+        with tempfile.NamedTemporaryFile() as inf, \
+             tempfile.NamedTemporaryFile() as outf, \
+             tempfile.NamedTemporaryFile() as tagf:
 
             inf.write(msg)
             inf.flush()
 
-            subprocess.run(
-                [
-                    "/usr/bin/openssl",   # Ubuntu default → OpenSSL 3.x
-                    "enc", "-aes-128-gcm",
-                    "-nosalt",
-                    "-K", key.hex(),
-                    "-iv", iv.hex(),
-                    "-aad", "",
-                    "-tag", tagf.name,
-                    "-in", inf.name,
-                    "-out", outf.name
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=True
-            )
+            for _ in range(BATCH_SIZE):
+                subprocess.run(
+                    [
+                        "/usr/local/bin/openssl111",
+                        "enc", "-aes-128-gcm",
+                        "-nosalt",
+                        "-K", key.hex(),
+                        "-iv", iv.hex(),
+                        "-aad", "",
+                        "-tag", tagf.name,
+                        "-in", inf.name,
+                        "-out", outf.name
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=True)
 
     return encrypt
 
@@ -198,11 +200,11 @@ def boringssl_aes_gcm_encrypt(msg):
 def mbedtls_aes_gcm_encrypt(msg):
     key = os.urandom(16)
     iv  = os.urandom(12)
-
     aes = mbed_cipher.AESGCM(key)
 
     def encrypt():
-        aes.encrypt(iv, msg, None)
+        for _ in range(BATCH_SIZE):
+            aes.encrypt(iv, msg, None)
 
     return encrypt
 
@@ -435,13 +437,17 @@ def main():
 
             for size in MESSAGE_SIZES: # [16, 512, 1024, 16384, 65536] in bytes
                 msg = os.urandom(size)
-
                 encrypt_fn = ops["encrypt"](msg)
-                for t in time_operation(encrypt_fn, record_avg=False):
-                    f.write(f"{lib_name:35s} {size:10d} {t:12d}\n")
+
+                warmup(encrypt_fn)
+                timings = time_operation(encrypt_fn)
+
+                # normalize batch time --> per-encryption time
+                for t in timings:
+                    per_op_ns = t // BATCH_SIZE
+                    f.write(f"{lib_name:35s} " f"{size:10d} " f"{per_op_ns:12d}\n")
 
             f.write("-" * 60 + "\n")
-
 
     print(f"Results saved to {output_file}")
 
