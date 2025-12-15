@@ -1,29 +1,19 @@
 #
 # dataAnalysis.py
-# Runs analysis on collected timing data and compares OpenSSL versions.
+# Runs analysis on collected timing data and compares crypto libraries.
 #
 
 import sys
 import os
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
-from scipy.stats import f_oneway, mannwhitneyu
+from scipy.stats import mannwhitneyu
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans, DBSCAN
+from statsmodels.distributions.empirical_distribution import ECDF
 
-# -----------------------------
-# Configuration
-# -----------------------------
-mean_plot_on = True
-single_size_on = True
-violin_on = False
-box_on = False
-k_means_on = False
-dbscan_on = False
-show_plots = False
 
 # -----------------------------
 # Input / Output directories
@@ -38,8 +28,7 @@ figure_dir = sys.argv[2]
 if not os.path.isdir(input_dir):
     print(f"Error: {input_dir} is not a directory")
     sys.exit(1)
-if not os.path.isdir(figure_dir):
-    os.makedirs(figure_dir, exist_ok=True)
+os.makedirs(figure_dir, exist_ok=True)
 
 # -----------------------------
 # Read and parse results files
@@ -62,27 +51,19 @@ for fname in os.listdir(input_dir):
         if len(parts) < 3:
             continue
 
-        # Everything except the last 2 parts is the library name
+        # Everything except last 2 parts is library name
         library = " ".join(parts[:-2])
-        size = float(parts[-2]) if parts[-2] != '-' else None
         time_ns = float(parts[-1]) if parts[-1] != '-' else None
-        time_us = time_ns / 1000.0 if time_ns is not None else None
+        if time_ns is None:
+            continue
 
-        data.append({
-            "Library": library,
-            "Size": size,
-            "Time_us": time_us
-        })
+        time_us = time_ns / 1000.0
+        data.append({"Library": library, "Time_us": time_us})
 
 df = pd.DataFrame(data)
 if df.empty:
     print("No valid data found.")
     sys.exit(1)
-
-# -----------------------------
-# Add normalized timing per byte
-# -----------------------------
-df['Time_us_per_byte'] = df['Time_us'] / df['Size']
 
 # -----------------------------
 # Detect OpenSSL version from library name
@@ -103,35 +84,33 @@ def extract_openssl_version(lib_name):
 df['Version'] = df['Library'].apply(extract_openssl_version)
 
 # -----------------------------
-# Compute statistics per library and version
+# Compute enhanced statistics per library and version
 # -----------------------------
 stat_file = os.path.join(figure_dir, "stats.txt")
 with open(stat_file, "w") as f:
     f.write("=== Library Statistics ===\n\n")
-    header = "{:<20s} {:>12s} {:>12s} {:>12s}".format("Library", "Mean(us)", "Median(us)", "Variance")
+    header = "{:<25s} {:>10s} {:>10s} {:>10s} {:>10s} {:>10s}".format(
+        "Library", "Mean(us)", "Median(us)", "Std(us)", "Min(us)", "Max(us)"
+    )
     print(header)
     f.write(header + "\n")
 
     for lib in df['Library'].unique():
-        subset = df[df['Library']==lib].dropna(subset=['Time_us'])
-        times = subset['Time_us'].tolist()
-        mean_time = np.mean(times)
-        median_time = np.median(times)
-        var_time = np.var(times)
-        line = "{:<20s} {:>12.2f} {:>12.2f} {:>12.2f}".format(lib, mean_time, median_time, var_time)
+        subset = df[df['Library']==lib]
+        times = subset['Time_us'].values
+        line = "{:<25s} {:>10.2f} {:>10.2f} {:>10.2f} {:>10.2f} {:>10.2f}".format(
+            lib, times.mean(), np.median(times), times.std(), times.min(), times.max()
+        )
         print(line)
         f.write(line + "\n")
-    f.write("\n")
 
-    # Per-version statistics
-    f.write("=== OpenSSL Version Statistics ===\n")
+    f.write("\n=== OpenSSL Version Statistics ===\n\n")
     for ver in df['Version'].unique():
-        subset = df[df['Version']==ver].dropna(subset=['Time_us'])
-        times = subset['Time_us'].tolist()
-        mean_time = np.mean(times)
-        median_time = np.median(times)
-        var_time = np.var(times)
-        line = "{:<15s} Mean: {:>10.2f}, Median: {:>10.2f}, Var: {:>10.2f}".format(ver, mean_time, median_time, var_time)
+        subset = df[df['Version']==ver]
+        times = subset['Time_us'].values
+        line = "{:<15s} {:>10.2f} {:>10.2f} {:>10.2f} {:>10.2f} {:>10.2f}".format(
+            ver, times.mean(), np.median(times), times.std(), times.min(), times.max()
+        )
         print(line)
         f.write(line + "\n")
 
@@ -147,58 +126,107 @@ with open(stat_file, "w") as f:
 print(f"\nLibrary statistics saved to {stat_file}")
 
 # -----------------------------
-# Plot median ± std vs message size per version
+# Boxplot per library
 # -----------------------------
-version_stats = df.groupby(['Version','Size']).agg(
-    median_time=('Time_us','median'),
-    mean_time=('Time_us','mean'),
-    std_time=('Time_us','std')
-).reset_index()
+plt.figure(figsize=(12,6))
+sns.boxplot(x='Library', y='Time_us', data=df)
+plt.xticks(rotation=45, ha='right')
+plt.ylabel("Encryption Time (µs)")
+plt.title("Timing Distribution per Library")
+plt.tight_layout()
+plt.savefig(os.path.join(figure_dir, "boxplot_library.png"))
+plt.close()
 
+# -----------------------------
+# Violin plot per version
+# -----------------------------
+plt.figure(figsize=(8,6))
+sns.violinplot(x='Version', y='Time_us', data=df)
+plt.ylabel("Encryption Time (µs)")
+plt.title("Timing Distribution per OpenSSL Version")
+plt.tight_layout()
+plt.savefig(os.path.join(figure_dir, "violin_version.png"))
+plt.close()
+
+# -----------------------------
+# Histogram per version
+# -----------------------------
 plt.figure(figsize=(10,6))
 for ver in df['Version'].unique():
-    subset = version_stats[version_stats['Version']==ver]
-    plt.plot(subset['Size'], subset['median_time'], marker='o', label=f"{ver} median")
-    plt.fill_between(subset['Size'],
-                     subset['median_time'] - subset['std_time'],
-                     subset['median_time'] + subset['std_time'],
-                     alpha=0.2)
-plt.xscale('log')
-plt.yscale('log')
-plt.xlabel("Message Size (Bytes)")
-plt.ylabel("Time (µs)")
-plt.title("Median Encryption Time ± Std by OpenSSL Version")
+    subset = df[df['Version']==ver]
+    sns.histplot(subset['Time_us'], kde=True, bins=30, alpha=0.5, label=ver)
+plt.xlabel("Encryption Time (µs)")
+plt.ylabel("Count")
+plt.title("Histogram of Encryption Times by Version")
 plt.legend()
-plt.grid(True, which="both", ls="--", lw=0.5)
 plt.tight_layout()
-fname = os.path.join(figure_dir, "openssl_version_comparison.png")
-plt.savefig(fname)
-print(f"Saved plot: {fname}")
-if show_plots:
-    plt.show()
+plt.savefig(os.path.join(figure_dir, "histogram_versions.png"))
 plt.close()
 
 # -----------------------------
-# Optional: PCA to visualize clustering by version
+# PCA visualization
 # -----------------------------
-feature_df = df[['Size','Time_us','Version','Library']].dropna()
-X = feature_df[['Size','Time_us']].values
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+# X = df[['Time_us']].values
+# scaler = StandardScaler()
+# X_scaled = scaler.fit_transform(X)
+# pca = PCA(n_components=2)
+# X_pca = pca.fit_transform(X_scaled)
 
-pca = PCA(n_components=2)
-X_pca = pca.fit_transform(X_scaled)
+# plt.figure(figsize=(8,6))
+# sns.scatterplot(x=X_pca[:,0], y=X_pca[:,1], hue=df['Version'], style=df['Library'], s=100)
+# plt.title("PCA of Timing Data by Version")
+# plt.grid(True)
+# plt.tight_layout()
+# plt.savefig(os.path.join(figure_dir, "pca_versions.png"))
+# plt.close()
 
-plt.figure(figsize=(8,6))
-sns.scatterplot(x=X_pca[:,0], y=X_pca[:,1], hue=feature_df['Version'], style=feature_df['Library'], s=100)
-plt.title("PCA of Timing Data by Version")
+# print("Analysis complete. Plots and statistics saved to:", figure_dir)
+
+# -----------------------------
+# 1D Density Plot
+# -----------------------------
+plt.figure(figsize=(10,6))
+for lib in df['Library'].unique():
+    subset = df[df['Library'] == lib]
+    sns.kdeplot(subset['Time_us'], label=lib, linewidth=2)
+
+plt.xlabel("Encryption Time (µs)")
+plt.ylabel("Density")
+plt.title("Kernel Density Estimate of Timing per Library")
+plt.legend()
+plt.tight_layout()
+plt.savefig("kde_library.png")
+plt.close()
+
+# -----------------------------
+# ECDF Plot
+# -----------------------------
+plt.figure(figsize=(10,6))
+for lib in df['Library'].unique():
+    subset = df[df['Library'] == lib]['Time_us']
+    ecdf = ECDF(subset)
+    plt.plot(ecdf.x, ecdf.y, label=lib)
+
+plt.xlabel("Encryption Time (µs)")
+plt.ylabel("ECDF")
+plt.title("ECDF of Encryption Timing")
+plt.legend()
 plt.grid(True)
 plt.tight_layout()
-fname = os.path.join(figure_dir, "pca_versions.png")
-plt.savefig(fname)
-print(f"Saved PCA plot: {fname}")
-if show_plots:
-    plt.show()
+plt.savefig("ecdf_library.png")
 plt.close()
 
-print("Analysis complete.")
+# -----------------------------
+# Violin Plot + jittered points
+# -----------------------------
+plt.figure(figsize=(10,6))
+sns.violinplot(x='Library', y='Time_us', data=df, inner=None)
+sns.stripplot(x='Library', y='Time_us', data=df,
+              color='black', size=3, jitter=True, alpha=0.5)
+plt.xticks(rotation=45, ha='right')
+plt.ylabel("Encryption Time (µs)")
+plt.title("Timing Distribution per Library (1D)")
+plt.tight_layout()
+plt.savefig("violin_strip_library.png")
+plt.close()
+
