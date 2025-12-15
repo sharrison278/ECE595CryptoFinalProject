@@ -1,6 +1,6 @@
 # ECE595CryptoFinalProject
 
-This project performs a timing analysis of various crpytographic libraries focusing on AES128-GCM:
+This project performs a timing analysis of various cryptographic libraries focusing on AES128-GCM:
 - OpenSSL v1.1.1
 - OpenSSL v3.0
 - LibreSSL
